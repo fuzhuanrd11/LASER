@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OEE 計算器</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg:      #07111f;
+    --surface: #0e1e33;
+    --border:  #1a3050;
+    --accent:  #ff7a2f;       /* 主橘 */
+    --accent2: #ffaa6b;       /* 淺橘 */
+    --text:    #e6edf7;
+    --muted:   #5a7a9a;
+    --A:   #4db6ff;           /* 天藍 — 可用率 */
+    --P:   #ff7a2f;           /* 橘   — 性能率 */
+    --Q:   #3ddfb0;           /* 青綠 — 品質率 */
+    --OEE: #ffc14d;           /* 金   — OEE */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    min-height: 100vh;
+    padding: 24px 16px 64px;
+    background-image:
+      radial-gradient(ellipse 70% 45% at 85% 5%,  rgba(255,122,47,.10) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 55% at 8%  85%,  rgba(77,182,255,.07) 0%, transparent 60%);
+  }
+
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 { font-size: clamp(30px,8vw,52px); font-weight: 900; letter-spacing: .05em; line-height: 1.1; }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--muted); font-size: 15px; margin-top: 6px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px;
+    max-width: 600px;
+    margin: 0 auto 20px;
+  }
+
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .input-grid { display: grid; gap: 14px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 14px; color: var(--muted); font-weight: 700;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .field label span { font-size: 12px; color: #1a3050; font-weight: 400; font-family: 'DM Mono', monospace; }
+
+  .field input, .field select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 22px; font-family: 'DM Mono', monospace; font-weight: 500;
+    padding: 13px 16px; width: 100%;
+    transition: border-color .2s, box-shadow .2s;
+    appearance: none; -moz-appearance: textfield;
+  }
+  .field input::-webkit-inner-spin-button,
+  .field input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .field input:focus, .field select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255,122,47,.15);
+  }
+  .field input::placeholder { color: #1a3050; }
+  .field select {
+    font-family: 'Noto Sans TC', sans-serif; font-size: 16px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a7a9a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
+  }
+  .field select option { background: #0e1e33; }
+
+  .btn {
+    width: 100%; padding: 17px; background: var(--accent); color: #fff;
+    border: none; border-radius: 12px; font-size: 19px; font-weight: 900;
+    font-family: 'Noto Sans TC', sans-serif; letter-spacing: .08em;
+    cursor: pointer; transition: opacity .15s, transform .1s; margin-top: 6px;
+  }
+  .btn:hover { opacity: .88; }
+  .btn:active { transform: scale(.98); }
+
+  .error-msg {
+    background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);
+    color: #f87171; border-radius: 10px; padding: 12px 16px;
+    font-size: 14px; margin-top: 10px; display: none;
+  }
+  .error-msg.show { display: block; }
+
+  /* ── 공式注記 ── */
+  .formula-note {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px;
+    max-width: 600px; margin: 0 auto 20px;
+  }
+  .formula-note p { font-size: 14px; color: var(--muted); line-height: 1.9; font-family: 'DM Mono', monospace; }
+  .formula-note p strong { color: var(--text); }
+
+  /* ── 工單紀錄表 ── */
+  .table-wrap { max-width: 600px; margin: 0 auto 24px; display: none; }
+  .table-wrap.visible { display: block; }
+
+  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .table-count { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .clear-all-btn {
+    background: transparent; border: 1px solid #3a1a1a; color: #f87171;
+    border-radius: 99px; font-size: 13px; padding: 5px 14px;
+    cursor: pointer; font-family: 'Noto Sans TC', sans-serif; transition: background .15s;
+  }
+  .clear-all-btn:hover { background: rgba(239,68,68,.08); }
+
+  .wo-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .wo-table th {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); padding: 9px 8px; text-align: center;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .wo-table th:first-child { text-align: left; }
+  .wo-table td {
+    padding: 11px 8px; text-align: center; border-bottom: 1px solid #0d1d30;
+    font-family: 'DM Mono', monospace; font-size: 14px; vertical-align: middle;
+  }
+  .wo-table td:first-child { text-align: left; font-family: 'Noto Sans TC', sans-serif; font-weight: 700; font-size: 15px; }
+  .wo-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* OEE 狀態 chip — 四級 */
+  .oee-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 11px; border-radius: 99px;
+    font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace;
+    white-space: nowrap;
+  }
+  .chip-excellent { background: rgba(61,223,176,.18);  color: #3ddfb0; }   /* ≥85% 優 */
+  .chip-good      { background: rgba(77,182,255,.18);  color: #4db6ff; }   /* ≥65% 達標 */
+  .chip-fair      { background: rgba(255,193,77,.18);  color: #ffc14d; }   /* ≥50% 待改善 */
+  .chip-danger    { background: rgba(239,68,68,.18);   color: #f87171; }   /* <50% 危險 */
+
+  /* 最弱因子 badge */
+  .weak-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #f87171; vertical-align: middle; margin-left: 3px;
+    animation: blink 1.4s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* 最弱因子建議條 */
+  .weak-bar {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: rgba(255,122,47,.07); border: 1px solid rgba(255,122,47,.22);
+    border-radius: 10px; padding: 10px 12px;
+    font-size: 13px; line-height: 1.5; margin-top: 2px;
+  }
+  .weak-bar-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .weak-bar-text { color: #ffaa6b; }
+  .weak-bar-text strong { color: #ff7a2f; }
+
+  /* 手機卡片 */
+  .wo-cards { display: none; }
+  .wo-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 10px;
+  }
+  .wo-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .wo-card-id  { font-size: 17px; font-weight: 900; }
+  .wo-card-nums {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 8px;
+  }
+  .wo-card-num { text-align: center; }
+  .wo-card-num-label { font-size: 11px; color: var(--muted); letter-spacing: .08em; margin-bottom: 2px; }
+  .wo-card-num-val   { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 500; }
+  .wo-card-bottom    { display: flex; justify-content: space-between; align-items: center; }
+
+  .pause-tag {
+    display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: 12px;
+    font-family: 'Noto Sans TC', sans-serif; font-weight: 700;
+    background: rgba(255,122,47,.15); color: #ff7a2f; white-space: nowrap;
+  }
+  .pause-tag.none { background: transparent; color: var(--muted); font-weight: 400; }
+
+  .del-btn {
+    background: transparent; border: none; color: #1a3050; cursor: pointer;
+    font-size: 17px; padding: 4px 8px; border-radius: 6px;
+    transition: color .15s, background .15s; line-height: 1;
+  }
+  .del-btn:hover { color: #f87171; background: rgba(239,68,68,.08); }
+
+  @media (max-width: 600px) {
+    .wo-table-wrap { display: none; }
+    .wo-cards { display: block; }
+    .row-2 { grid-template-columns: 1fr; }
+  }
+  @media (min-width: 601px) {
+    .wo-table-wrap { display: block; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OEE <span>計算器</span></h1>
+  <p>Overall Equipment Effectiveness｜設備綜合效率</p>
+</header>
+
+<!-- 輸入卡 -->
+<div class="card">
+  <div class="section-label">輸入工單資料</div>
+  <div class="input-grid">
+    <div class="row-2">
+      <div class="field">
+        <label>工單號碼</label>
+        <input type="text" id="wo_id" placeholder="例：WO-2024-001">
+      </div>
+      <div class="field">
+        <label>暫停原因</label>
+        <select id="pause_reason">
+          <option value="">— 無暫停 —</option>
+          <option value="待設計改圖">待設計改圖</option>
+          <option value="待確認材料">待確認材料</option>
+          <option value="待客戶回覆">待客戶回覆</option>
+          <option value="修改程式">修改程式</option>
+        </select>
+      </div>
+    </div>
+    <div class="row-nums">
+      <div class="field">
+        <label>計畫排版數量 <span>張</span></label>
+        <input type="number" id="planned" placeholder="1000" min="0">
+      </div>
+      <div class="field">
+        <label>實際排版數量 <span>張</span></label>
+        <input type="number" id="actual" placeholder="920" min="0">
+      </div>
+      <div class="field">
+        <label>理論工時 <span>分鐘</span></label>
+        <input type="number" id="theory_time" placeholder="480" min="0">
+      </div>
+      <div class="field">
+        <label>投入張數 <span>張</span></label>
+        <input type="number" id="input_qty" placeholder="900" min="0">
+      </div>
+      <div class="field">
+        <label>不良張數 <span>張</span></label>
+        <input type="number" id="defect_qty" placeholder="27" min="0">
+      </div>
+    </div>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+  <button class="btn" onclick="addRecord()">＋ 計算並加入工單清單</button>
+</div>
+
+<!-- 公式注記 -->
+<div class="formula-note">
+  <p>
+    <strong>A</strong> = 實際排版 ÷ 計畫排版　
+    <strong>P</strong> = 投入張數 ÷ 實際排版　
+    <strong>Q</strong> = (投入－不良) ÷ 投入　
+    <strong>OEE</strong> = A × P × Q　｜　
+    <strong>優</strong> ≥85%　<strong>達標</strong> ≥65%　<strong>待改善</strong> ≥50%　<strong>危險</strong> &lt;50%
+  </p>
+</div>
+
+<!-- 工單清單 -->
+<div class="table-wrap" id="tableWrap">
+  <div class="table-header">
+    <div class="section-label" style="margin:0;flex:1">工單紀錄</div>
+    <span class="table-count" id="tableCount"></span>
+    <button class="clear-all-btn" onclick="clearAll()" style="margin-left:12px">全部清除</button>
+  </div>
+
+  <!-- 桌面表格 -->
+  <div class="wo-table-wrap">
+    <table class="wo-table">
+      <thead>
+        <tr>
+          <th>工單號</th>
+          <th>計畫</th>
+          <th>實際</th>
+          <th>投入</th>
+          <th>不良</th>
+          <th style="color:var(--A)">A 可用率</th>
+          <th style="color:var(--P)">P 性能率</th>
+          <th style="color:var(--Q)">Q 品質率</th>
+          <th style="color:var(--OEE)">OEE</th>
+          <th>最弱因子 / 建議</th>
+          <th>暫停原因</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="woTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 手機卡片 -->
+  <div class="wo-cards" id="woCards"></div>
+</div>
+
+<script>
+let records = [];
+
+function fmt(v) { return (v * 100).toFixed(1) + '%'; }
+
+/* OEE 四級 */
+function oeeLevel(v) {
+  if (v >= 0.85) return { cls: 'chip-excellent', label: '優' };
+  if (v >= 0.65) return { cls: 'chip-good',      label: '達標' };
+  if (v >= 0.50) return { cls: 'chip-fair',      label: '待改善' };
+  return              { cls: 'chip-danger',    label: '危險' };
+}
+
+/* 最弱因子分析 */
+function weakFactor(A, P, Q) {
+  const factors = [
+    { key:'A', val:A, name:'A 可用率', color:'var(--A)',
+      advice:'計畫排版與實際落差大，優先檢查設備停機、換模、等料等停線原因。' },
+    { key:'P', val:P, name:'P 性能率', color:'var(--P)',
+      advice:'投入量低於實際排版，優先檢查加工速度、小停機、操作節拍是否異常。' },
+    { key:'Q', val:Q, name:'Q 品質率', color:'var(--Q)',
+      advice:'不良率偏高，優先檢查製程參數、材料批次或改圖後首件確認是否落實。' },
+  ];
+  // 找最小值
+  const minVal = Math.min(A, P, Q);
+  const weak = factors.filter(f => f.val === minVal);
+  return weak[0]; // 若同分取第一個
+}
+
+function addRecord() {
+  const wo_id       = document.getElementById('wo_id').value.trim();
+  const pause       = document.getElementById('pause_reason').value;
+  const planned     = parseFloat(document.getElementById('planned').value);
+  const actual      = parseFloat(document.getElementById('actual').value);
+  const theory_time = parseFloat(document.getElementById('theory_time').value);
+  const input_qty   = parseFloat(document.getElementById('input_qty').value);
+  const defect_qty  = parseFloat(document.getElementById('defect_qty').value);
+
+  const errEl = document.getElementById('errorMsg');
+  errEl.classList.remove('show');
+
+  if ([planned, actual, theory_time, input_qty, defect_qty].some(isNaN)) {
+    errEl.textContent = '⚠ 請填寫所有數值欄位後再計算。';
+    errEl.classList.add('show'); return;
+  }
+  if (planned <= 0 || input_qty <= 0) {
+    errEl.textContent = '⚠ 計畫排版數量與投入張數必須大於 0。';
+    errEl.classList.add('show'); return;
+  }
+  if (defect_qty > input_qty) {
+    errEl.textContent = '⚠ 不良張數不能大於投入張數。';
+    errEl.classList.add('show'); return;
+  }
+  if (actual > planned) {
+    errEl.textContent = '⚠ 實際排版數量不能大於計畫排版數量。';
+    errEl.classList.add('show'); return;
+  }
+
+  const A   = actual / planned;
+  const P   = actual > 0 ? input_qty / actual : 0;
+  const Q   = input_qty > 0 ? (input_qty - defect_qty) / input_qty : 0;
+  const OEE = A * P * Q;
+  const id  = Date.now();
+
+  records.push({ id, wo_id: wo_id || '（未填）', pause, planned, actual, input_qty, defect_qty, A, P, Q, OEE });
+  renderTable();
+  clearForm();
+}
+
+function clearForm() {
+  ['wo_id','planned','actual','theory_time','input_qty','defect_qty'].forEach(k => {
+    document.getElementById(k).value = '';
+  });
+  document.getElementById('pause_reason').value = '';
+  document.getElementById('wo_id').focus();
+}
+
+function deleteRecord(id) {
+  records = records.filter(r => r.id !== id);
+  renderTable();
+}
+
+function clearAll() {
+  if (!records.length) return;
+  if (confirm('確定要清除所有工單紀錄？')) { records = []; renderTable(); }
+}
+
+function renderTable() {
+  const wrap = document.getElementById('tableWrap');
+  if (!records.length) { wrap.classList.remove('visible'); return; }
+  wrap.classList.add('visible');
+  document.getElementById('tableCount').textContent = `共 ${records.length} 張工單`;
+
+  /* ── 桌面 table ── */
+  document.getElementById('woTableBody').innerHTML = records.map(r => {
+    const lvl  = oeeLevel(r.OEE);
+    const weak = weakFactor(r.A, r.P, r.Q);
+    // 各欄位：若是最弱因子，加紅點
+    const dotA = weak.key==='A' ? '<span class="weak-dot"></span>' : '';
+    const dotP = weak.key==='P' ? '<span class="weak-dot"></span>' : '';
+    const dotQ = weak.key==='Q' ? '<span class="weak-dot"></span>' : '';
+
+    return `
+    <tr>
+      <td>${esc(r.wo_id)}</td>
+      <td>${r.planned}</td>
+      <td>${r.actual}</td>
+      <td>${r.input_qty}</td>
+      <td>${r.defect_qty}</td>
+      <td style="color:var(--A)">${fmt(r.A)}${dotA}</td>
+      <td style="color:var(--P)">${fmt(r.P)}${dotP}</td>
+      <td style="color:var(--Q)">${fmt(r.Q)}${dotQ}</td>
+      <td><span class="oee-chip ${lvl.cls}">${fmt(r.OEE)} ${lvl.label}</span></td>
+      <td style="min-width:160px;text-align:left">
+        <div style="font-size:11px;font-weight:700;color:${weak.color};margin-bottom:3px">
+          ▼ ${weak.name}（${fmt(weak.val)}）
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">${weak.advice}</div>
+      </td>
+      <td>${r.pause ? `<span class="pause-tag">${esc(r.pause)}</span>` : '<span class="pause-tag none">—</span>'}</td>
+      <td><button class="del-btn" onclick="deleteRecord(${r.id})" title="刪除">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  /* ── 手機 cards ── */
+  document.getElementById('woCards').innerHTML = records.map(r => {
+    const lvl  = oeeLevel(r.OEE);
+    const weak = weakFactor(r.A, r.P, r.Q);
+    const weakColor = weak.key==='A' ? 'var(--A)' : weak.key==='P' ? 'var(--P)' : 'var(--Q)';
+
+    return `
+    <div class="wo-card">
+      <div class="wo-card-top">
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:.08em;margin-bottom:2px">工單號</div>
+          <div class="wo-card-id">${esc(r.wo_id)}</div>
+          ${r.pause ? `<div style="margin-top:5px"><span class="pause-tag">${esc(r.pause)}</span></div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:.08em;margin-bottom:4px">OEE</div>
+          <span class="oee-chip ${lvl.cls}" style="font-size:14px">${fmt(r.OEE)}</span>
+          <div style="margin-top:4px;font-size:13px;font-weight:900;letter-spacing:.05em;color:${
+            lvl.cls==='chip-excellent'?'#3ddfb0':lvl.cls==='chip-good'?'#4db6ff':lvl.cls==='chip-fair'?'#ffc14d':'#f87171'
+          }">${lvl.label}</div>
+        </div>
+      </div>
+
+      <div class="wo-card-nums">
+        <div class="wo-card-num">
+          <div class="wo-card-num-label" style="color:var(--A)">A 可用率${weak.key==='A'?'<span class="weak-dot"></span>':''}</div>
+          <div class="wo-card-num-val" style="color:var(--A)">${fmt(r.A)}</div>
+        </div>
+        <div class="wo-card-num">
+          <div class="wo-card-num-label" style="color:var(--P)">P 性能率${weak.key==='P'?'<span class="weak-dot"></span>':''}</div>
+          <div class="wo-card-num-val" style="color:var(--P)">${fmt(r.P)}</div>
+        </div>
+        <div class="wo-card-num">
+          <div class="wo-card-num-label" style="color:var(--Q)">Q 品質率${weak.key==='Q'?'<span class="weak-dot"></span>':''}</div>
+          <div class="wo-card-num-val" style="color:var(--Q)">${fmt(r.Q)}</div>
+        </div>
+      </div>
+
+      <!-- 最弱因子建議 -->
+      <div class="weak-bar" style="margin-bottom:8px">
+        <div class="weak-bar-icon">⚡</div>
+        <div class="weak-bar-text">
+          <strong>優先改善：${weak.name}（${fmt(weak.val)}）</strong><br>
+          ${weak.advice}
+        </div>
+      </div>
+
+      <div class="wo-card-bottom">
+        <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">
+          計畫 ${r.planned} / 實際 ${r.actual} / 投入 ${r.input_qty} / 不良 ${r.defect_qty}
+        </span>
+        <button class="del-btn" onclick="deleteRecord(${r.id})" title="刪除">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') addRecord();
+});
+</script>
+</body>
+</html>
